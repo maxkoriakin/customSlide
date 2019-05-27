@@ -9,12 +9,4 @@
 import UIKit
 
 class OneSideSlider: Slider {
-
-
-    override func setupIndicatorView() {
-        
-    }
-    
-    override func setupFillView() {
-    }
 }

@@ -9,25 +9,18 @@
 import UIKit
 
 class Slider: UIView {
-
+    
     // MARK: - Properties
-    var sliderColor: UIColor = .green
-    var fillSliderColor: UIColor = .blue
+    @IBInspectable var sliderColor: UIColor = .green
+    @IBInspectable var fillSliderColor: UIColor = .blue
     
-    var maxValue: CGFloat = 900
-    var minValue: CGFloat = 10
-    var startPoint: CGFloat = 0.0
+    @IBInspectable  var maxValue: CGFloat = 900
+    @IBInspectable  var minValue: CGFloat = 10
     
-    private let indicatorViewHeight: CGFloat = 1
-    
-    @IBInspectable var selectedValue: CGFloat {
-        set {
-            setupIndicatorPosition()
-            _selectedValue = newValue
-        }
-        get {
-            return _selectedValue
-        }
+    @IBInspectable var selectedPosition: CGFloat = 0.0
+
+    var startPoint: CGFloat {
+        return 0.0
     }
     
     // MARK: - Computed Properties
@@ -36,34 +29,49 @@ class Slider: UIView {
     }
     
     // MARK: - Private Properties
-    private var sliderView = UIView()
-    private var indicatorView = UIView()
-    private var filledSliderLayer = UIView()
+    var sliderView = UIView()
+    var filledSliderLayer = UIView()
     
-    var bottomIndicatorAnchor: NSLayoutConstraint?
+    var topFillAnchor: NSLayoutConstraint?
+    var bottomFillAnchor: NSLayoutConstraint?
     
-    private var _selectedValue: CGFloat = 100
-    private var selectedIndicatorPosition: CGFloat = 0.0
+    var selectedValue: CGFloat = 100 {
+        willSet {
+            if newValue < minValue {
+                selectedValue = minValue
+            } else if newValue > maxValue {
+                selectedValue = maxValue
+            }
+        }
+        didSet {
+            setupPosition()
+        }
+    }
     
     // MARK: - Life Cycle
     init(frame: CGRect, selectedValue: CGFloat) {
-        self._selectedValue = selectedValue
-        
+        self.selectedValue = selectedValue
         super.init(frame: frame)
         
-        self.setupSliderView()
-        self.setupIndicatorView()
-        self.setupGestureRecognizers()
+        initialize()
     }
     
     required init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+        super.init(coder: aDecoder)
+        
+        initialize()
     }
     
-    override func layoutSubviews() {
-        super.layoutSubviews()
+    override func awakeFromNib() {
+        super.awakeFromNib()
         
-//        setupControlPoints()
+        updateValues()
+    }
+    
+    func initialize() {
+        self.setupSliderView()
+        setupFillView()
+        self.setupGestureRecognizers()
     }
     
     // MARK: - Setup
@@ -82,26 +90,6 @@ class Slider: UIView {
         sliderView.bottomAnchor.constraint(equalTo: self.bottomAnchor, constant: 0.0).isActive = true
     }
     
-    func setupIndicatorView() {
-        indicatorView.backgroundColor = fillSliderColor
-        
-        sliderView.addSubview(indicatorView)
-        
-        indicatorView.translatesAutoresizingMaskIntoConstraints = false
-        
-        indicatorView.leadingAnchor.constraint(equalTo: sliderView.leadingAnchor, constant: 0.0).isActive = true
-        indicatorView.trailingAnchor.constraint(equalTo: sliderView.trailingAnchor, constant: 0.0).isActive = true
-        indicatorView.heightAnchor.constraint(equalToConstant: indicatorViewHeight).isActive = true
-        bottomIndicatorAnchor = indicatorView.bottomAnchor.constraint(equalTo: sliderView.bottomAnchor, constant: -selectedIndicatorPosition)
-        bottomIndicatorAnchor?.isActive = true
-        setupIndicatorPosition()
-        
-        setupFillView()
-        
-        layoutIfNeeded()
-        setupIndicatorPosition()
-    }
-    
     func setupFillView() {
         filledSliderLayer.backgroundColor = fillSliderColor
         
@@ -111,8 +99,15 @@ class Slider: UIView {
         
         filledSliderLayer.leadingAnchor.constraint(equalTo: sliderView.leadingAnchor, constant: 0.0).isActive = true
         filledSliderLayer.trailingAnchor.constraint(equalTo: sliderView.trailingAnchor, constant: 0.0).isActive = true
-        filledSliderLayer.topAnchor.constraint(equalTo: indicatorView.bottomAnchor, constant: 0.0).isActive = true
-        filledSliderLayer.bottomAnchor.constraint(equalTo: sliderView.bottomAnchor, constant: 0.0).isActive = true
+        
+        bottomFillAnchor = filledSliderLayer.bottomAnchor.constraint(equalTo: sliderView.bottomAnchor, constant: -startPoint)
+        bottomFillAnchor?.isActive = true
+        
+        topFillAnchor = filledSliderLayer.topAnchor.constraint(equalTo: sliderView.topAnchor, constant: (sliderView.frame.height - selectedPosition))
+        topFillAnchor?.isActive = true
+        
+        layoutIfNeeded()
+        setupPosition()
     }
     
     private func setupGestureRecognizers() {
@@ -123,62 +118,45 @@ class Slider: UIView {
         sliderView.addGestureRecognizer(panGestureRecognizer)
     }
     
-    private func setupIndicatorPosition() {
-        let indicatorPosition = ((selectedValue - minValue) / maxValue) * sliderView.frame.height
-        selectedIndicatorPosition = indicatorPosition
+    var valueDifferrent: CGFloat {
+        return maxValue - minValue
+    }
+    
+    var valueMultiplier: CGFloat {
+        return valueDifferrent / maxValue
+    }
+
+    func setupPosition() {
+        let position = (selectedValue / maxValue) * sliderView.frame.height
+        selectedPosition = position
         
-        bottomIndicatorAnchor?.constant = -indicatorPosition
+        topFillAnchor?.constant = (sliderView.frame.height - position)
     }
     
     // MARK: - Actions
     @objc private func sliderPanGestureRecognizerAction(_ panGestureRecognizer: UIPanGestureRecognizer) {
         guard panGestureRecognizer.state == .changed else { return }
         
-        updateIndicatorPosition(for: panGestureRecognizer)
+        updatePosition(for: panGestureRecognizer)
     }
     
     // MARK: - Helper Methods
-    private func updateIndicatorPosition(for gestureRecognizer: UIGestureRecognizer) {
+    func updatePosition(for gestureRecognizer: UIGestureRecognizer) {
         let location: CGPoint = gestureRecognizer.location(in: sliderView)
-        let position: CGFloat = sliderView.frame.height - location.y + indicatorView.frame.height / 2
+        let position: CGFloat = sliderView.frame.height - location.y
         let indicatorPosition: CGFloat = position > sliderView.frame.height ? sliderView.frame.height : position
-//        let maxIndicatorPosition: CGFloat = sliderView.frame.height - height(for: minValue)
-//        let newIndicatorPosition: CGFloat = max(min(indicatorPosition, maxIndicatorPosition), 0)
-//        selectedIndicatorPosition = newIndicatorPosition
-        selectedIndicatorPosition = indicatorPosition
+        selectedPosition = indicatorPosition
 
-        bottomIndicatorAnchor?.constant = -indicatorPosition
+        topFillAnchor?.constant = (sliderView.frame.height - indicatorPosition)
         
-        layoutIfNeeded()
-        
-//        changeToSelectedPosition()
+        layoutIfNeeded()        
     }
     
-//    private func selectedValue(for indicatorPosition: CGFloat) -> CGFloat {
-//        let relatedMinValue: CGFloat = (minValue / (maxValue - minValue)) * sliderView.frame.height
-//
-//        var progress: CGFloat
-//        if indicatorPosition > 0 {
-//            progress = (indicatorPosition + relatedMinValue) / sliderView.frame.height
-//        } else {
-//            progress = relatedMinValue / sliderView.frame.height
-//        }
-//
-//        if progress > 1 {
-//            progress = 1
-//        }
-//
-//        let selectedValue: CGFloat = maxValue * progress
-//
-//        return selectedValue
-//    }
-//
-//    private func changeToSelectedPosition() {
-//        indicatorView.bottomAnchor.constraint(equalTo: sliderView.bottomAnchor, constant: -selectedIndicatorPosition).isActive = true
-//
-//        let newSelectedValue: CGFloat = selectedValue(for: selectedIndicatorPosition)
-//        _selectedValue = newSelectedValue
-//    }
+    func updateValues() {
+        sliderView.backgroundColor = sliderColor
+        filledSliderLayer.backgroundColor = fillSliderColor
+        setupPosition()
+    }
 }
 
 // MARK: - UIGestureRecognizerDelegate
